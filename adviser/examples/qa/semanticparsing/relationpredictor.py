@@ -28,7 +28,7 @@ class Trainer:
             self.optimizer, 1, gamma=self.config["learning_rate"]
         )
 
-        self.model_path = None  # TODO
+        self.model_path = None  # TODO make_filename(config)
         pass
 
     def train(self, train_data, dev_data=None):
@@ -65,9 +65,14 @@ class Trainer:
         # TODO Wen-Tseng
         # TODO evaluate on dev
 
-        torch.save(self.model.state_dict(), self.model_path)
+        if self.model_path:
+            torch.save(self.model.state_dict(), self.model_path)
 
     def test(self, data):
+        assert(self.model_path)
+        self.model.load_state_dict(torch.load(self.model_path))
+        self.model.eval()
+
         test_loss = 0
         test_metrics = {}
 

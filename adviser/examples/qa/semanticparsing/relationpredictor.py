@@ -28,7 +28,7 @@ class Trainer:
             self.optimizer, 1, gamma=self.config["learning_rate"]
         )
 
-        self.model_path
+        self.model_path = None  # TODO
         pass
 
     def train(self, train_data, dev_data=None):
@@ -61,6 +61,9 @@ class Trainer:
 
             print("Epoch: %d" % (epoch + 1))
             print(f"\tLoss: {train_loss/len(train_data):.4f}(train)")
+
+        # TODO Wen-Tseng
+        # TODO evaluate on dev
 
         torch.save(self.model.state_dict(), self.model_path)
 
@@ -125,7 +128,7 @@ if __name__ == "__main__":
         mlflow.start_run()
         mlflow.log_params(utils.get_log_params())  # TODO
 
-    trainer = Trainer(config)
+    trainer = Trainer(config["parameters"])
     if args.train:
         df_train = pd.read_json(args.data_dir + "csqa.train.json")
         df_dev = pd.read_json(args.data_dir + "csqa.dev.json")

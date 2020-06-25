@@ -10,6 +10,7 @@ def evaluate(self, dev_data):
     true_labels = []
     epoch_macrof1 = []
     epoch_microf1 = []
+    label_list = list(range(281))
 
     self.model.eval()
 
@@ -48,8 +49,8 @@ def evaluate(self, dev_data):
                 true_labels = labels
 
             # F1 metrics:
-            macrof1 = get_macro_f1(labels, predictions, tagset) # need to add tagset (label list)
-            microf1 = get_micro_f1(labels, predictions, tagset)
+            macrof1 = get_macro_f1(labels, predictions, label_list) 
+            microf1 = get_micro_f1(labels, predictions, label_list)
             epoch_macrof1.append(macrof1)
             epoch_microf1.append(microf1)
 
@@ -62,4 +63,4 @@ def evaluate(self, dev_data):
     # print its report table
     best_dev_loss = min(epoch_loss)
     print("Best dev loss: ", best_dev_loss)
-    print_classification_report(true_labels, best_predictions, list(range(281)))
+    print_classification_report(true_labels, best_predictions, label_list)

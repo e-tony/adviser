@@ -8,12 +8,12 @@ def print_classification_report(gold, pred, classes):
     return report
 
 
-def get_macro_f1(gold, pred):
-    return f1_score(y_true=gold, y_pred=pred, average="macro")
+def get_macro_f1(gold, pred, labels):
+    return f1_score(y_true=gold, y_pred=pred, labels=labels, average="macro")
 
 
-def get_micro_f1(gold, pred):
-    return f1_score(y_true=gold, y_pred=pred, average="micro")
+def get_micro_f1(gold, pred, labels):
+    return f1_score(y_true=gold, y_pred=pred, labels=labels, average="micro")
 
 
 def mean_reciprocal_rank(rs):

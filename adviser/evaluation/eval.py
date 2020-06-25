@@ -48,8 +48,8 @@ def evaluate(self, dev_data):
                 true_labels = labels
 
             # F1 metrics:
-            macrof1 = get_macro_f1(labels, predictions)
-            microf1 = get_micro_f1(labels, predictions)
+            macrof1 = get_macro_f1(labels, predictions, tagset) # need to add tagset (label list)
+            microf1 = get_micro_f1(labels, predictions, tagset)
             epoch_macrof1.append(macrof1)
             epoch_microf1.append(microf1)
 

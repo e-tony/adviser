@@ -26,10 +26,8 @@ class Trainer:
         self.config = config
         self.params = params
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        # self.model = MLP(int(self.config["emb_dim"]), int(self.config["n_classes"]))
         self.model = NN(int(self.config["emb_dim"]), int(self.config["n_classes"]))
         # self.criterion = torch.nn.CrossEntropyLoss().to(self.device)
-        # self.criterion = F.cross_entropy().to(self.device)
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=4.0)
         self.scheduler = torch.optim.lr_scheduler.StepLR(
             self.optimizer, 1, gamma=float(self.config["learning_rate"])
@@ -52,7 +50,6 @@ class Trainer:
         epoch_dev_metrics = []
         epoch_dev_f1_metrics = []
         epoch_dev_report_metrics = []
-        epoch_dev_f1s = []
 
         classes = list(range(281))
 
@@ -66,8 +63,6 @@ class Trainer:
             dev_loss = 0
             dev_metrics = []
             dev_f1_metrics = []
-            # dev_report_metrics = []
-            dev_f1s = []
 
             for i, batch in enumerate(batches):
                 self.optimizer.zero_grad()  # TODO what does it do?
@@ -129,11 +124,6 @@ class Trainer:
                             mlflow.log_metric("Dev acc", dev_acc)
                             mlflow.log_metric("Dev f1", dev_f1)
 
-                    # print("Acc:", dev_acc)
-                    # evaluate on dev_data
-                    # dev_metrics = self.evaluate(dev_data)
-                    # print("Dev metrics", dev_metrics)
-
             secs = int(time.time() - start_time)
             mins = secs / 60
             secs = secs % 60
@@ -144,7 +134,7 @@ class Trainer:
             epoch_train_metrics.append(sum(train_metrics) / len(train_metrics))
             epoch_dev_metrics.append(sum(dev_metrics) / len(dev_metrics))
             epoch_dev_f1_metrics.append(sum(dev_f1_metrics) / len(dev_f1_metrics))
-            # epoch_dev_f1s.append(sum(dev_f1s)/len(dev_f1s))
+
             print(
                 "Epoch: %d" % (epoch + 1),
                 " | time in %d minutes, %d seconds" % (mins, secs),
@@ -161,8 +151,6 @@ class Trainer:
             )
             print(f"\tLast dev Acc: {epoch_dev_metrics[-1]:.4f} (dev)")
             print(f"\tLast dev F1: {epoch_dev_f1_metrics[-1]:.4f} (dev)")
-
-            # print(f"\tEpoch F1: {sum(epoch_dev_f1s)/len(epoch_dev_f1s):.4f} (dev)")
 
             if self.params.log_metrics:
                 mlflow.log_metric("Epoch Loss", sum(epoch_loss) / len(epoch_loss))
@@ -183,41 +171,6 @@ class Trainer:
         # print final report
         print(epoch_dev_report_metrics[-1])
 
-        # return train_loss / len(train_data), train_metrics, dev_metrics
-
-        # def train(self, train_data, dev_data=None):
-        #     epoch_loss = []
-        #     epoch_metrics = []
-        #
-        #     batches = utils.split_into_batches(train_data, int(self.config["batch_size"]))
-        #
-        #     for epoch in range(int(self.config["epochs"])):
-        #         train_loss = 0
-        #         train_metrics = {}
-        #         for batch in batches:
-        #             embs, rels, idxs = (
-        #                 torch.tensor(batch[0], device=self.device),
-        #                 torch.tensor(batch[1], dtype=torch.long, device=self.device),
-        #                 torch.tensor(batch[2], device=self.device),
-        #             )
-        #             self.optimizer.zero_grad()
-        #             outputs = self.model(embs)
-        #             loss = self.criterion(outputs, rels)
-        #             train_loss += loss.item()
-        #             loss.backward()
-        #             self.optimizer.step()
-        #         #             metrics = get_metrics(output.argmax(10), rel)
-        #         #             train_metrics = add_metrics(metrics, train_metrics)
-        #
-        #         self.scheduler.step()
-        #         epoch_loss.append(train_loss / len(train_data))
-        #         epoch_metrics.append(train_metrics)
-        #
-        #         # evaluate on dev_data
-        #         self.evaluate(dev_data)
-        #         #print("Epoch: %d" % (epoch + 1))
-        #         #print(f"\tLoss: {train_loss/len(train_data):.4f}(train)")
-
         if not os.path.isdir("saved_models"):
             os.mkdir("saved_models")
         if not self.model_path:
@@ -228,144 +181,78 @@ class Trainer:
             ) + ".pt"
         torch.save(self.model.state_dict(), self.model_path)
 
-    def evaluate(self, dev_data):
-        self.model.eval()
+    # def evaluate(self, dev_data):
+    #     self.model.eval()
+    #
+    #     # record evaluation matrics
+    #     total_loss = 0
+    #     epoch_metrics = []
+    #
+    #     label_list = list(range(281))
+    #     batches = utils.split_into_batches(
+    #         dev_data, int(self.config["batch_size"])
+    #     )  # eval in batches
+    #
+    #     predictions = []
+    #     labels = []
+    #
+    #     with torch.no_grad():
+    #         for batch in batches:
+    #             embs, rels, idxs = (
+    #                 torch.tensor(batch[0], device=self.device),
+    #                 torch.tensor(batch[1], dtype=torch.long, device=self.device),
+    #                 torch.tensor(batch[2], device=self.device),
+    #             )
+    #             outputs = self.model(embs)
+    #             loss = F.cross_entropy(outputs, rels)
+    #             total_loss += loss.item()
+    #
+    #             labels.append(rels.tolist())
+    #             predictions.append(outputs.argmax(1).tolist())
+    #
+    #     # F1 metrics:
+    #     # print("Labels", labels, "\n")
+    #     # print("Predictions", predictions, "\n")
+    #     # print("Label list:", label_list)
+    #
+    #     predictions = [pred for batch_preds in predictions for pred in batch_preds]
+    #     labels = [label for batch_labels in labels for label in batch_labels]
+    #     macrof1 = metrics.get_macro_f1(labels, predictions, label_list)
+    #     microf1 = metrics.get_micro_f1(labels, predictions, label_list)
+    #
+    #     epoch_metrics.append({"macro-f1": macrof1, "micro-f1": microf1})
+    #
+    #     print("Macro F1:", macrof1)
+    #     print("Micro F1:", microf1)
+    #
+    #     if self.params.log_metrics:
+    #         mlflow.log_metric("Macro F1", macrof1)
+    #         mlflow.log_metric("Micro F1", microf1)
+    #
+    #     return epoch_metrics
 
-        # record evaluation matrics
-        total_loss = 0
-        epoch_metrics = []
-
-        label_list = list(range(281))
-        batches = utils.split_into_batches(
-            dev_data, int(self.config["batch_size"])
-        )  # eval in batches
-
-        predictions = []
-        labels = []
-
-        with torch.no_grad():
-            for batch in batches:
-                embs, rels, idxs = (
-                    torch.tensor(batch[0], device=self.device),
-                    torch.tensor(batch[1], dtype=torch.long, device=self.device),
-                    torch.tensor(batch[2], device=self.device),
-                )
-                outputs = self.model(embs)
-                loss = F.cross_entropy(outputs, rels)
-                total_loss += loss.item()
-
-                labels.append(rels.tolist())
-                predictions.append(outputs.argmax(1).tolist())
-
-        # F1 metrics:
-        # print("Labels", labels, "\n")
-        # print("Predictions", predictions, "\n")
-        # print("Label list:", label_list)
-
-        predictions = [pred for batch_preds in predictions for pred in batch_preds]
-        labels = [label for batch_labels in labels for label in batch_labels]
-        macrof1 = metrics.get_macro_f1(labels, predictions, label_list)
-        microf1 = metrics.get_micro_f1(labels, predictions, label_list)
-
-        epoch_metrics.append({"macro-f1": macrof1, "micro-f1": microf1})
-
-        print("Macro F1:", macrof1)
-        print("Micro F1:", microf1)
-
-        if self.params.log_metrics:
-            mlflow.log_metric("Macro F1", macrof1)
-            mlflow.log_metric("Micro F1", microf1)
-
-        return epoch_metrics
-
-        # def evaluate(self, dev_data):
-        #     epoch_loss = []
-        #     epoch_metrics = []
-        #
-        #     # record evaluation matrics
-        #     best_dev_loss = float('inf')
-        #     best_predictions = []
-        #     true_labels = []
-        #     epoch_macrof1 = []
-        #     epoch_microf1 = []
-        #     label_list = list(range(281))
-        #
-        #     self.model.eval()
-        #
-        #     batches = utils.split_into_batches(dev_data, int(self.config["batch_size"]))
-        #
-        #     for epoch in range(int(self.config["epochs"])):
-        #         dev_loss = 0
-        #         dev_metrics = {}
-        #
-        #         # record evaluation matrics
-        #         predictions = []
-        #         labels = []
-        #
-        #         with torch.no_grad():
-        #             for batch in batches:
-        #                 embs, rels, idxs = (
-        #                     torch.tensor(batch[0], device=self.device),
-        #                     torch.tensor(batch[1], dtype=torch.long, device=self.device),
-        #                     torch.tensor(batch[2], device=self.device),
-        #                 )
-        #                 outputs = self.model(embs) # predictions
-        #                 loss = self.criterion(outputs, rels)
-        #                 dev_loss += loss.item()
-        #
-        #                 # record for evaluation metrics:
-        #                 labels.append(rels)
-        #                 predictions.append(outputs.argmax(1).tolist())
-        #
-        #             epoch_loss.append(dev_loss / len(dev_data))
-        #             epoch_metrics.append(dev_metrics)
-        #
-        #             # record for evaluation metrics:
-        #             if dev_loss < best_dev_loss:
-        #                 best_dev_loss = dev_loss
-        #                 best_predictions = predictions
-        #                 true_labels = labels
-        #
-        #             # F1 metrics:
-        #             print("Labels", labels, "\n")
-        #             print("Predictions", predictions, "\n")
-        #             print("Label list:", label_list)
-        #             macrof1 = metrics.get_macro_f1(labels, predictions, label_list)
-        #             microf1 = metrics.get_micro_f1(labels, predictions, label_list)
-        #             epoch_macrof1.append(macrof1)
-        #             epoch_microf1.append(microf1)
-        #
-        #             print("Epoch: %d" % (epoch + 1))
-        #             print(f"\tLoss: {dev_loss/len(dev_data):.4f}(dev)")
-
-        # find model with best dev loss
-        # print its report table
-        best_dev_loss = min(epoch_loss)
-        print("Best dev loss: ", best_dev_loss)
-        metrics.print_classification_report(true_labels, best_predictions, label_list)
-
-    def test(self, data):
-        assert self.model_path
-        self.model.load_state_dict(torch.load(self.model_path))
-        self.model.eval()
-
-        test_loss = 0
-        test_metrics = {}
-
-        self.optimizer.zero_grad()
-        embs, rels, idxs = (
-            torch.tensor(data[0], device=self.device),
-            torch.tensor(data[1], dtype=torch.long, device=self.device),
-            torch.tensor(data[2], device=self.device),
-        )
-        outputs = self.model(embs)
-
-        loss = self.criterion(outputs, rels)
-        test_loss += loss.item()
-        #     metrics = get_metrics(output.argmax(10), rels)
-        #     test_metrics = add_metrics(metrics, test_metrics)
-
-        return test_loss / len(data), test_metrics
+    # def test(self, data):
+    #     assert self.model_path
+    #     self.model.load_state_dict(torch.load(self.model_path))
+    #     self.model.eval()
+    #
+    #     test_loss = 0
+    #     test_metrics = {}
+    #
+    #     self.optimizer.zero_grad()
+    #     embs, rels, idxs = (
+    #         torch.tensor(data[0], device=self.device),
+    #         torch.tensor(data[1], dtype=torch.long, device=self.device),
+    #         torch.tensor(data[2], device=self.device),
+    #     )
+    #     outputs = self.model(embs)
+    #
+    #     loss = self.criterion(outputs, rels)
+    #     test_loss += loss.item()
+    #     #     metrics = get_metrics(output.argmax(10), rels)
+    #     #     test_metrics = add_metrics(metrics, test_metrics)
+    #
+    #     return test_loss / len(data), test_metrics
 
 
 if __name__ == "__main__":

@@ -2,9 +2,8 @@ from sklearn.metrics import classification_report, f1_score
 import numpy as np
 
 
-def print_classification_report(gold, pred, classes):
-    report = classification_report(y_true=gold, y_pred=pred, target_names=classes)
-    print(report)
+def get_classification_report(gold, pred, classes):
+    report = classification_report(y_true=gold, y_pred=pred, labels=classes)
     return report
 
 
@@ -18,7 +17,7 @@ def get_micro_f1(gold, pred):
 
 def mean_reciprocal_rank(rs):
     rs = (np.asarray(r).nonzero()[0] for r in rs)
-    return np.mean([1. / (r[0] + 1) if r.size else 0. for r in rs])
+    return np.mean([1.0 / (r[0] + 1) if r.size else 0.0 for r in rs])
 
 
 def hits_at_k(ranks, k=10):
@@ -27,9 +26,9 @@ def hits_at_k(ranks, k=10):
 
 def mrr(ranks):
     # nmean reciprocal rank
-    return np.average([1.0/r for r in ranks])
+    return np.average([1.0 / r for r in ranks])
 
 
 def mq(ranks, max_rank):
     # mean quantile
-    return 1.0 - (np.average(ranks)/(max_rank-1))
+    return 1.0 - (np.average(ranks) / (max_rank - 1))

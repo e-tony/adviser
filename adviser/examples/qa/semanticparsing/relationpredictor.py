@@ -298,6 +298,12 @@ if __name__ == "__main__":
         default=False,
         help="Set to path of configuration file.",
     )
+    parser.add_argument(
+        "--random-emb",
+        required=False,
+        default=False,
+        help="Set to true if sentence embeddings should be randomly generated.",
+    )
     args = parser.parse_args()
 
     config_files = [os.path.join(args.config, f) for f in os.listdir(args.config)]
@@ -323,24 +329,30 @@ if __name__ == "__main__":
         if args.train:
             df_train = pd.read_json(args.data_dir + "csqa.train.json")
             df_dev = pd.read_json(args.data_dir + "csqa.dev.json")
-            train_embs = reader.load_embs(args.data_dir + "csqa.train.embeddings.bin")
-            dev_embs = reader.load_embs(args.data_dir + "csqa.dev.embeddings.bin")
+            if args.random_emb:
+                train_embs = np.random.uniform(-1, 1, (768, 406213))
+                dev_embs = np.random.uniform(-1, 1, (768, 45076))
+            else:
+                train_embs = reader.load_embs(args.data_dir + "csqa.train.embeddings.bin")
+                dev_embs = reader.load_embs(args.data_dir + "csqa.dev.embeddings.bin")
             train_data = reader.get_data(
                 df_train,
                 train_embs,
                 rel2idx,
                 subset=int(config["parameters"]["subset_train"]),
                 shuffle=False,
+                random=args.random_emb
             )
 
-            df_dev = pd.read_json(args.data_dir + "csqa.dev.json")
-            dev_embs = reader.load_embs(args.data_dir + "csqa.dev.embeddings.bin")
+            # df_dev = pd.read_json(args.data_dir + "csqa.dev.json")
+            # dev_embs = reader.load_embs(args.data_dir + "csqa.dev.embeddings.bin")
             dev_data = reader.get_data(
                 df_dev,
                 dev_embs,
                 rel2idx,
                 subset=int(config["parameters"]["subset_dev"]),
                 shuffle=False,
+                random=args.random_emb
             )
             trainer.train(train_data, dev_data)
 

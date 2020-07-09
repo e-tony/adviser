@@ -25,7 +25,11 @@ class Trainer:
         self.config = config
         self.params = params
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = NN(int(self.config["emb_dim"]), int(self.config["n_classes"]), n_hid1=int(self.config["h_dim1"]))
+        self.model = NN(
+            int(self.config["emb_dim"]),
+            int(self.config["n_classes"]),
+            n_hid1=int(self.config["h_dim1"]),
+        )
         # self.criterion = torch.nn.CrossEntropyLoss().to(self.device)
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=4.0)
         self.scheduler = torch.optim.lr_scheduler.StepLR(
@@ -47,10 +51,15 @@ class Trainer:
         ranks = []
         try:
             for i, instance in enumerate(outputs):
-                idxs = {i:o for i,o in enumerate(instance.tolist())}
-                sorted_idxs = {k: v for k, v in sorted(idxs.items(), key=lambda item: item[1], reverse=True)}
+                idxs = {i: o for i, o in enumerate(instance.tolist())}
+                sorted_idxs = {
+                    k: v
+                    for k, v in sorted(
+                        idxs.items(), key=lambda item: item[1], reverse=True
+                    )
+                }
                 rank = list(sorted_idxs.keys()).index(y_true[i])
-                ranks.append(rank+1)
+                ranks.append(rank + 1)
         except:
             print(y_true)
         return ranks
@@ -73,6 +82,8 @@ class Trainer:
 
         batches = utils.split_into_batches(train_data, int(self.config["batch_size"]))
 
+        step = 0
+
         for epoch in range(int(self.config["epochs"])):
             start_time = time.time()
 
@@ -90,6 +101,7 @@ class Trainer:
             dev_mrr = []
 
             for i, batch in enumerate(batches):
+                step += 1
                 self.optimizer.zero_grad()  # TODO what does it do?
                 embs, rels, idxs = (
                     torch.tensor(batch[0]),
@@ -111,10 +123,8 @@ class Trainer:
                 train_acc = num_corrects / len(rels)
                 train_metrics.append(train_acc)
                 train_f1 = f1_score(
-                            rels.tolist(),
-                            outputs.argmax(1).tolist(),
-                            average="macro",
-                        )
+                    rels.tolist(), outputs.argmax(1).tolist(), average="macro",
+                )
                 train_f1_metrics.append(train_f1)
 
                 train_ranks = self.get_ranks(outputs, rels.tolist())
@@ -165,17 +175,23 @@ class Trainer:
                         dev_mrr.append(_dev_mrr)
 
                         if self.params.log_metrics:
-                            mlflow.log_metric("Train loss", train_loss / len(train_metrics))
-                            mlflow.log_metric("Train acc", train_acc)
-                            mlflow.log_metric("Train hitsat3", _train_hits3)
-                            mlflow.log_metric("Train hitsat10", _train_hits10)
-                            mlflow.log_metric("Train mrr", _train_mrr)
-                            mlflow.log_metric("Dev loss", dev_loss / len(dev_metrics))
-                            mlflow.log_metric("Dev acc", dev_acc)
-                            mlflow.log_metric("Dev f1", dev_f1)
-                            mlflow.log_metric("Dev hitsat3", _dev_hits3)
-                            mlflow.log_metric("Dev hitsat10", _dev_hits10)
-                            mlflow.log_metric("Dev mrr", _dev_mrr)
+                            mlflow.log_metric(
+                                "Train loss", train_loss / len(train_metrics), step=step
+                            )
+                            mlflow.log_metric("Train acc", train_acc, step=step)
+                            mlflow.log_metric("Train hitsat3", _train_hits3, step=step)
+                            mlflow.log_metric(
+                                "Train hitsat10", _train_hits10, step=step
+                            )
+                            mlflow.log_metric("Train mrr", _train_mrr, step=step)
+                            mlflow.log_metric(
+                                "Dev loss", dev_loss / len(dev_metrics), step=step
+                            )
+                            mlflow.log_metric("Dev acc", dev_acc, step=step)
+                            mlflow.log_metric("Dev f1", dev_f1, step=step)
+                            mlflow.log_metric("Dev hitsat3", _dev_hits3, step=step)
+                            mlflow.log_metric("Dev hitsat10", _dev_hits10, step=step)
+                            mlflow.log_metric("Dev mrr", _dev_mrr, step=step)
 
             secs = int(time.time() - start_time)
             mins = secs / 60
@@ -185,15 +201,15 @@ class Trainer:
             self.scheduler.step()
             epoch_loss.append(train_loss / len(train_metrics))
             epoch_train_metrics.append(sum(train_metrics) / len(train_metrics))
-            epoch_train_f1_metrics.append(sum(train_f1_metrics)/len(train_f1_metrics))
-            epoch_train_hits3.append(sum(train_hits3)/len(train_hits3))
-            epoch_train_hits10.append(sum(train_hits10)/len(train_hits10))
-            epoch_train_mrr.append(sum(train_mrr)/len(train_mrr))
+            epoch_train_f1_metrics.append(sum(train_f1_metrics) / len(train_f1_metrics))
+            epoch_train_hits3.append(sum(train_hits3) / len(train_hits3))
+            epoch_train_hits10.append(sum(train_hits10) / len(train_hits10))
+            epoch_train_mrr.append(sum(train_mrr) / len(train_mrr))
             epoch_dev_metrics.append(sum(dev_metrics) / len(dev_metrics))
             epoch_dev_f1_metrics.append(sum(dev_f1_metrics) / len(dev_f1_metrics))
-            epoch_dev_hits3.append(sum(dev_hits3)/len(dev_hits3))
-            epoch_dev_hits10.append(sum(dev_hits10)/len(dev_hits10))
-            epoch_dev_mrr.append(sum(dev_mrr)/len(dev_mrr))
+            epoch_dev_hits3.append(sum(dev_hits3) / len(dev_hits3))
+            epoch_dev_hits10.append(sum(dev_hits10) / len(dev_hits10))
+            epoch_dev_mrr.append(sum(dev_mrr) / len(dev_mrr))
 
             print(
                 "Epoch: %d" % (epoch + 1),
@@ -206,18 +222,28 @@ class Trainer:
             print(
                 f"\tEpoch avg F1: {sum(epoch_train_f1_metrics)/len(epoch_train_f1_metrics):.4f} (train)"
             )
-            print(f"\tEpoch avg hitsat3: {sum(epoch_train_hits3)/len(epoch_train_hits3):.4f} (train)")
-            print(f"\tEpoch avg hitsat10: {sum(epoch_train_hits10)/len(epoch_train_hits10):.4f} (train)")
-            print(f"\tEpoch avg mrr: {sum(epoch_train_mrr)/len(epoch_train_mrr):.4f} (train)")
-            
+            print(
+                f"\tEpoch avg hitsat3: {sum(epoch_train_hits3)/len(epoch_train_hits3):.4f} (train)"
+            )
+            print(
+                f"\tEpoch avg hitsat10: {sum(epoch_train_hits10)/len(epoch_train_hits10):.4f} (train)"
+            )
+            print(
+                f"\tEpoch avg mrr: {sum(epoch_train_mrr)/len(epoch_train_mrr):.4f} (train)"
+            )
+
             print(
                 f"\tEpoch avg Acc: {sum(epoch_dev_metrics)/len(epoch_dev_metrics):.4f} (dev)"
             )
             print(
                 f"\tEpoch avg F1: {sum(epoch_dev_f1_metrics)/len(epoch_dev_f1_metrics):.4f} (dev)"
             )
-            print(f"\tEpoch avg hitsat3: {sum(epoch_dev_hits3)/len(epoch_dev_hits3):.4f} (dev)")
-            print(f"\tEpoch avg hitsat10: {sum(epoch_dev_hits10)/len(epoch_dev_hits10):.4f} (dev)")
+            print(
+                f"\tEpoch avg hitsat3: {sum(epoch_dev_hits3)/len(epoch_dev_hits3):.4f} (dev)"
+            )
+            print(
+                f"\tEpoch avg hitsat10: {sum(epoch_dev_hits10)/len(epoch_dev_hits10):.4f} (dev)"
+            )
             print(f"\tEpoch avg mrr: {sum(epoch_dev_mrr)/len(epoch_dev_mrr):.4f} (dev)")
             print(f"\tLast Acc: {epoch_dev_metrics[-1]:.4f} (dev)")
             print(f"\tLast F1: {epoch_dev_f1_metrics[-1]:.4f} (dev)")
@@ -226,31 +252,56 @@ class Trainer:
             print(f"\tEpoch last mrr: {epoch_dev_mrr[-1]:.4f} (dev")
 
             if self.params.log_metrics:
-                mlflow.log_metric("Epoch Loss", sum(epoch_loss) / len(epoch_loss))
+                mlflow.log_metric(
+                    "Epoch Loss", sum(epoch_loss) / len(epoch_loss), step=epoch + 1
+                )
                 mlflow.log_metric(
                     "Epoch Avg Acc train",
                     sum(epoch_train_metrics) / len(epoch_train_metrics),
+                    step=epoch + 1,
                 )
                 mlflow.log_metric(
                     "Epoch Avg F1 train",
-                    sum(epoch_train_f1_metrics)/len(epoch_train_f1_metrics),
+                    sum(epoch_train_f1_metrics) / len(epoch_train_f1_metrics),
+                    step=epoch + 1,
                 )
-                mlflow.log_metric("Epoch Hits at3 train", epoch_train_hits3[-1])
-                mlflow.log_metric("Epoch Hits at10 train", epoch_train_hits10[-1])
-                mlflow.log_metric("Epoch MRR train", epoch_train_mrr[-1])
                 mlflow.log_metric(
-                    "Epoch Avg Acc dev", sum(epoch_dev_metrics) / len(epoch_dev_metrics)
+                    "Epoch Hits at3 train", epoch_train_hits3[-1], step=epoch + 1
+                )
+                mlflow.log_metric(
+                    "Epoch Hits at10 train", epoch_train_hits10[-1], step=epoch + 1
+                )
+                mlflow.log_metric(
+                    "Epoch MRR train", epoch_train_mrr[-1], step=epoch + 1
+                )
+                mlflow.log_metric(
+                    "Epoch Avg Acc dev",
+                    sum(epoch_dev_metrics) / len(epoch_dev_metrics),
+                    step=epoch + 1,
                 )
                 mlflow.log_metric(
                     "Epoch Avg F1 dev",
                     sum(epoch_dev_f1_metrics) / len(epoch_dev_f1_metrics),
+                    step=epoch + 1,
                 )
-                mlflow.log_metric("Epoch Avg MRR dev", sum(epoch_dev_mrr)/len(epoch_dev_mrr))
-                mlflow.log_metric("Epoch Acc dev", epoch_dev_metrics[-1])
-                mlflow.log_metric("Epoch F1 dev", epoch_dev_f1_metrics[-1])
-                mlflow.log_metric("Epoch Hits at3 dev", epoch_dev_hits3[-1])
-                mlflow.log_metric("Epoch Hits at10 dev", epoch_dev_hits10[-1])
-                mlflow.log_metric("Epoch MRR dev", epoch_dev_mrr[-1])
+                mlflow.log_metric(
+                    "Epoch Avg MRR dev",
+                    sum(epoch_dev_mrr) / len(epoch_dev_mrr),
+                    step=epoch + 1,
+                )
+                mlflow.log_metric(
+                    "Epoch Acc dev", epoch_dev_metrics[-1], step=epoch + 1
+                )
+                mlflow.log_metric(
+                    "Epoch F1 dev", epoch_dev_f1_metrics[-1], step=epoch + 1
+                )
+                mlflow.log_metric(
+                    "Epoch Hits at3 dev", epoch_dev_hits3[-1], step=epoch + 1
+                )
+                mlflow.log_metric(
+                    "Epoch Hits at10 dev", epoch_dev_hits10[-1], step=epoch + 1
+                )
+                mlflow.log_metric("Epoch MRR dev", epoch_dev_mrr[-1], step=epoch + 1)
 
         # print final report
         print(epoch_dev_report_metrics[-1])
@@ -333,7 +384,9 @@ if __name__ == "__main__":
                 train_embs = np.random.uniform(-1, 1, (406213, 768))
                 dev_embs = np.random.uniform(-1, 1, (45076, 768))
             else:
-                train_embs = reader.load_embs(args.data_dir + "csqa.train.embeddings.bin")
+                train_embs = reader.load_embs(
+                    args.data_dir + "csqa.train.embeddings.bin"
+                )
                 dev_embs = reader.load_embs(args.data_dir + "csqa.dev.embeddings.bin")
             train_data = reader.get_data(
                 df_train,
@@ -341,7 +394,7 @@ if __name__ == "__main__":
                 rel2idx,
                 subset=int(config["parameters"]["subset_train"]),
                 shuffle=False,
-                random=args.random_emb
+                random=args.random_emb,
             )
 
             # df_dev = pd.read_json(args.data_dir + "csqa.dev.json")
@@ -352,7 +405,7 @@ if __name__ == "__main__":
                 rel2idx,
                 subset=int(config["parameters"]["subset_dev"]),
                 shuffle=False,
-                random=args.random_emb
+                random=args.random_emb,
             )
             trainer.train(train_data, dev_data)
 

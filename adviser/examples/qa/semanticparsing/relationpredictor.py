@@ -7,7 +7,6 @@ import math
 import time
 import configparser
 import argparse
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -17,7 +16,7 @@ import utils
 import reader
 from evaluation import metrics
 import neuralmodels
-from neuralmodels.mlp import MLP, NN
+from neuralmodels.mlp import NN
 from sklearn.metrics import f1_score, accuracy_score
 
 
@@ -42,14 +41,33 @@ class Trainer:
         torch.save(self.model.state_dict(), self.model_path)
 
     def load_model(self, model_path):
-        self.model.load_state_dict(torch.load(model_path))
+        self.model = torch.load(model_path)
+
+    def get_ranks(self, outputs, y_true):
+        ranks = []
+        try:
+            for i, instance in enumerate(outputs):
+                idxs = {i:o for i,o in enumerate(instance.tolist())}
+                sorted_idxs = {k: v for k, v in sorted(idxs.items(), key=lambda item: item[1], reverse=True)}
+                rank = list(sorted_idxs.keys()).index(y_true[i])
+                ranks.append(rank+1)
+        except:
+            print(y_true)
+        return ranks
 
     def train(self, train_data, dev_data):
         epoch_loss = []
         epoch_train_metrics = []
+        epoch_train_f1_metrics = []
+        epoch_train_hits3 = []
+        epoch_train_hits10 = []
+        epoch_train_mrr = []
         epoch_dev_metrics = []
         epoch_dev_f1_metrics = []
         epoch_dev_report_metrics = []
+        epoch_dev_hits3 = []
+        epoch_dev_hits10 = []
+        epoch_dev_mrr = []
 
         classes = list(range(281))
 
@@ -60,9 +78,16 @@ class Trainer:
 
             train_loss = 0
             train_metrics = []
+            train_f1_metrics = []
+            train_hits3 = []
+            train_hits10 = []
+            train_mrr = []
             dev_loss = 0
             dev_metrics = []
             dev_f1_metrics = []
+            dev_hits3 = []
+            dev_hits10 = []
+            dev_mrr = []
 
             for i, batch in enumerate(batches):
                 self.optimizer.zero_grad()  # TODO what does it do?
@@ -85,12 +110,23 @@ class Trainer:
                 num_corrects = (outputs.argmax(1) == rels).sum().item()
                 train_acc = num_corrects / len(rels)
                 train_metrics.append(train_acc)
+                train_f1 = f1_score(
+                            rels.tolist(),
+                            outputs.argmax(1).tolist(),
+                            average="macro",
+                        )
+                train_f1_metrics.append(train_f1)
 
-                if self.params.log_metrics:
-                    mlflow.log_metric("Train loss", train_loss / len(train_metrics))
-                    mlflow.log_metric("Train acc", train_acc)
+                train_ranks = self.get_ranks(outputs, rels.tolist())
+                _train_hits3 = metrics.hits_at_k(train_ranks, k=3)
+                _train_hits10 = metrics.hits_at_k(train_ranks, k=10)
+                train_hits3.append(_train_hits3)
+                train_hits10.append(_train_hits10)
 
-                if i % 100 == 0:
+                _train_mrr = metrics.mrr(train_ranks)
+                train_mrr.append(_train_mrr)
+
+                if i % 500 == 0:
                     with torch.no_grad():
                         dev_embs, dev_rels, dev_idxs = dev_data
                         dev_embs, dev_rels, dev_idxs = (
@@ -119,10 +155,27 @@ class Trainer:
                         )
                         epoch_dev_report_metrics.append(dev_report)
 
+                        dev_ranks = self.get_ranks(dev_outputs, dev_rels.tolist())
+                        _dev_hits3 = metrics.hits_at_k(dev_ranks, k=3)
+                        _dev_hits10 = metrics.hits_at_k(dev_ranks, k=10)
+                        dev_hits3.append(_dev_hits3)
+                        dev_hits10.append(_dev_hits10)
+
+                        _dev_mrr = metrics.mrr(dev_ranks)
+                        dev_mrr.append(_dev_mrr)
+
                         if self.params.log_metrics:
+                            mlflow.log_metric("Train loss", train_loss / len(train_metrics))
+                            mlflow.log_metric("Train acc", train_acc)
+                            mlflow.log_metric("Train hits@3", _train_hits3)
+                            mlflow.log_metric("Train hits@10", _train_hits10)
+                            mlflow.log_metric("Train mrr", _train_mrr)
                             mlflow.log_metric("Dev loss", dev_loss / len(dev_metrics))
                             mlflow.log_metric("Dev acc", dev_acc)
                             mlflow.log_metric("Dev f1", dev_f1)
+                            mlflow.log_metric("Dev hits@3", _dev_hits3)
+                            mlflow.log_metric("Dev hits@10", _dev_hits10)
+                            mlflow.log_metric("Dev mrr", _dev_mrr)
 
             secs = int(time.time() - start_time)
             mins = secs / 60
@@ -132,25 +185,45 @@ class Trainer:
             self.scheduler.step()
             epoch_loss.append(train_loss / len(train_metrics))
             epoch_train_metrics.append(sum(train_metrics) / len(train_metrics))
+            epoch_train_f1_metrics.append(sum(train_f1_metrics)/len(train_f1_metrics))
+            epoch_train_hits3.append(sum(train_hits3)/len(train_hits3))
+            epoch_train_hits10.append(sum(train_hits10)/len(train_hits10))
+            epoch_train_mrr.append(sum(train_mrr)/len(train_mrr))
             epoch_dev_metrics.append(sum(dev_metrics) / len(dev_metrics))
             epoch_dev_f1_metrics.append(sum(dev_f1_metrics) / len(dev_f1_metrics))
+            epoch_dev_hits3.append(sum(dev_hits3)/len(dev_hits3))
+            epoch_dev_hits10.append(sum(dev_hits10)/len(dev_hits10))
+            epoch_dev_mrr.append(sum(dev_mrr)/len(dev_mrr))
 
             print(
                 "Epoch: %d" % (epoch + 1),
                 " | time in %d minutes, %d seconds" % (mins, secs),
             )
-            print(f"\tEpoch Loss: {sum(epoch_loss)/len(epoch_loss):.4f}(train)")
+            print(f"\tEpoch avg Loss: {sum(epoch_loss)/len(epoch_loss):.4f}(train)")
             print(
-                f"\tEpoch Acc: {sum(epoch_train_metrics)/len(epoch_train_metrics):.4f} (train)"
+                f"\tEpoch avg Acc: {sum(epoch_train_metrics)/len(epoch_train_metrics):.4f} (train)"
             )
             print(
-                f"\tEpoch Acc: {sum(epoch_dev_metrics)/len(epoch_dev_metrics):.4f} (dev)"
+                f"\tEpoch avg F1: {sum(epoch_train_f1_metrics)/len(epoch_train_f1_metrics):.4f} (train)"
+            )
+            print(f"\tEpoch avg hits@3: {sum(epoch_train_hits3)/len(epoch_train_hits3):.4f} (train)")
+            print(f"\tEpoch avg hits@10: {sum(epoch_train_hits10)/len(epoch_train_hits10):.4f} (train)")
+            print(f"\tEpoch avg mrr: {sum(epoch_train_mrr)/len(epoch_train_mrr):.4f} (train)")
+            
+            print(
+                f"\tEpoch avg Acc: {sum(epoch_dev_metrics)/len(epoch_dev_metrics):.4f} (dev)"
             )
             print(
-                f"\tEpoch F1: {sum(epoch_dev_f1_metrics)/len(epoch_dev_f1_metrics):.4f} (dev)"
+                f"\tEpoch avg F1: {sum(epoch_dev_f1_metrics)/len(epoch_dev_f1_metrics):.4f} (dev)"
             )
-            print(f"\tLast dev Acc: {epoch_dev_metrics[-1]:.4f} (dev)")
-            print(f"\tLast dev F1: {epoch_dev_f1_metrics[-1]:.4f} (dev)")
+            print(f"\tEpoch avg hits@3: {sum(epoch_dev_hits3)/len(epoch_dev_hits3):.4f} (dev)")
+            print(f"\tEpoch avg hits@10: {sum(epoch_dev_hits10)/len(epoch_dev_hits10):.4f} (dev)")
+            print(f"\tEpoch avg mrr: {sum(epoch_dev_mrr)/len(epoch_dev_mrr):.4f} (dev)")
+            print(f"\tLast Acc: {epoch_dev_metrics[-1]:.4f} (dev)")
+            print(f"\tLast F1: {epoch_dev_f1_metrics[-1]:.4f} (dev)")
+            print(f"\tEpoch last hits@3: {epoch_dev_hits3[-1]:.4f} (dev")
+            print(f"\tEpoch last hits@10: {epoch_dev_hits10[-1]:.4f} (dev")
+            print(f"\tEpoch last mrr: {epoch_dev_mrr[-1]:.4f} (dev")
 
             if self.params.log_metrics:
                 mlflow.log_metric("Epoch Loss", sum(epoch_loss) / len(epoch_loss))
@@ -159,14 +232,25 @@ class Trainer:
                     sum(epoch_train_metrics) / len(epoch_train_metrics),
                 )
                 mlflow.log_metric(
+                    "Epoch Avg F1 train",
+                    sum(epoch_train_f1_metrics)/len(epoch_train_f1_metrics),
+                )
+                mlflow.log_metric("Epoch Hits @3 train", epoch_train_hits3[-1])
+                mlflow.log_metric("Epoch Hits @10 train", epoch_train_hits10[-1])
+                mlflow.log_metric("Epoch MRR train", epoch_train_mrr[-1])
+                mlflow.log_metric(
                     "Epoch Avg Acc dev", sum(epoch_dev_metrics) / len(epoch_dev_metrics)
                 )
                 mlflow.log_metric(
                     "Epoch Avg F1 dev",
                     sum(epoch_dev_f1_metrics) / len(epoch_dev_f1_metrics),
                 )
+                mlflow.log_metric("Epoch Avg MRR dev", sum(epoch_dev_mrr)/len(epoch_dev_mrr))
                 mlflow.log_metric("Epoch Acc dev", epoch_dev_metrics[-1])
                 mlflow.log_metric("Epoch F1 dev", epoch_dev_f1_metrics[-1])
+                mlflow.log_metric("Epoch Hits @3 dev", epoch_dev_hits3[-1])
+                mlflow.log_metric("Epoch Hits @10 dev", epoch_dev_hits10[-1])
+                mlflow.log_metric("Epoch MRR dev", epoch_dev_mrr[-1])
 
         # print final report
         print(epoch_dev_report_metrics[-1])
@@ -179,80 +263,7 @@ class Trainer:
             self.model_path.split(".pt")[0] + "_" + time.strftime(
                 "%Y%m%d-%H%M%S"
             ) + ".pt"
-        torch.save(self.model.state_dict(), self.model_path)
-
-    # def evaluate(self, dev_data):
-    #     self.model.eval()
-    #
-    #     # record evaluation matrics
-    #     total_loss = 0
-    #     epoch_metrics = []
-    #
-    #     label_list = list(range(281))
-    #     batches = utils.split_into_batches(
-    #         dev_data, int(self.config["batch_size"])
-    #     )  # eval in batches
-    #
-    #     predictions = []
-    #     labels = []
-    #
-    #     with torch.no_grad():
-    #         for batch in batches:
-    #             embs, rels, idxs = (
-    #                 torch.tensor(batch[0], device=self.device),
-    #                 torch.tensor(batch[1], dtype=torch.long, device=self.device),
-    #                 torch.tensor(batch[2], device=self.device),
-    #             )
-    #             outputs = self.model(embs)
-    #             loss = F.cross_entropy(outputs, rels)
-    #             total_loss += loss.item()
-    #
-    #             labels.append(rels.tolist())
-    #             predictions.append(outputs.argmax(1).tolist())
-    #
-    #     # F1 metrics:
-    #     # print("Labels", labels, "\n")
-    #     # print("Predictions", predictions, "\n")
-    #     # print("Label list:", label_list)
-    #
-    #     predictions = [pred for batch_preds in predictions for pred in batch_preds]
-    #     labels = [label for batch_labels in labels for label in batch_labels]
-    #     macrof1 = metrics.get_macro_f1(labels, predictions, label_list)
-    #     microf1 = metrics.get_micro_f1(labels, predictions, label_list)
-    #
-    #     epoch_metrics.append({"macro-f1": macrof1, "micro-f1": microf1})
-    #
-    #     print("Macro F1:", macrof1)
-    #     print("Micro F1:", microf1)
-    #
-    #     if self.params.log_metrics:
-    #         mlflow.log_metric("Macro F1", macrof1)
-    #         mlflow.log_metric("Micro F1", microf1)
-    #
-    #     return epoch_metrics
-
-    # def test(self, data):
-    #     assert self.model_path
-    #     self.model.load_state_dict(torch.load(self.model_path))
-    #     self.model.eval()
-    #
-    #     test_loss = 0
-    #     test_metrics = {}
-    #
-    #     self.optimizer.zero_grad()
-    #     embs, rels, idxs = (
-    #         torch.tensor(data[0], device=self.device),
-    #         torch.tensor(data[1], dtype=torch.long, device=self.device),
-    #         torch.tensor(data[2], device=self.device),
-    #     )
-    #     outputs = self.model(embs)
-    #
-    #     loss = self.criterion(outputs, rels)
-    #     test_loss += loss.item()
-    #     #     metrics = get_metrics(output.argmax(10), rels)
-    #     #     test_metrics = add_metrics(metrics, test_metrics)
-    #
-    #     return test_loss / len(data), test_metrics
+        self.save_model()
 
 
 if __name__ == "__main__":
@@ -309,10 +320,7 @@ if __name__ == "__main__":
             subset=int(config["parameters"]["subset_train"]),
             shuffle=False,
         )
-        # dev_data = reader.get_data(df_dev)
-        # trainer.train(train_data, dev_data)
 
-        # if args.test:
         df_dev = pd.read_json(args.data_dir + "csqa.dev.json")
         dev_embs = reader.load_embs(args.data_dir + "csqa.dev.embeddings.bin")
         dev_data = reader.get_data(
@@ -323,8 +331,6 @@ if __name__ == "__main__":
             shuffle=False,
         )
         trainer.train(train_data, dev_data)
-
-    print("Results")  # TODO pretty print to terminal
 
     if args.log_metrics:
         mlflow.end_run()

@@ -167,14 +167,14 @@ class Trainer:
                         if self.params.log_metrics:
                             mlflow.log_metric("Train loss", train_loss / len(train_metrics))
                             mlflow.log_metric("Train acc", train_acc)
-                            mlflow.log_metric("Train hits@3", _train_hits3)
-                            mlflow.log_metric("Train hits@10", _train_hits10)
+                            mlflow.log_metric("Train hitsat3", _train_hits3)
+                            mlflow.log_metric("Train hitsat10", _train_hits10)
                             mlflow.log_metric("Train mrr", _train_mrr)
                             mlflow.log_metric("Dev loss", dev_loss / len(dev_metrics))
                             mlflow.log_metric("Dev acc", dev_acc)
                             mlflow.log_metric("Dev f1", dev_f1)
-                            mlflow.log_metric("Dev hits@3", _dev_hits3)
-                            mlflow.log_metric("Dev hits@10", _dev_hits10)
+                            mlflow.log_metric("Dev hitsat3", _dev_hits3)
+                            mlflow.log_metric("Dev hitsat10", _dev_hits10)
                             mlflow.log_metric("Dev mrr", _dev_mrr)
 
             secs = int(time.time() - start_time)
@@ -206,8 +206,8 @@ class Trainer:
             print(
                 f"\tEpoch avg F1: {sum(epoch_train_f1_metrics)/len(epoch_train_f1_metrics):.4f} (train)"
             )
-            print(f"\tEpoch avg hits@3: {sum(epoch_train_hits3)/len(epoch_train_hits3):.4f} (train)")
-            print(f"\tEpoch avg hits@10: {sum(epoch_train_hits10)/len(epoch_train_hits10):.4f} (train)")
+            print(f"\tEpoch avg hitsat3: {sum(epoch_train_hits3)/len(epoch_train_hits3):.4f} (train)")
+            print(f"\tEpoch avg hitsat10: {sum(epoch_train_hits10)/len(epoch_train_hits10):.4f} (train)")
             print(f"\tEpoch avg mrr: {sum(epoch_train_mrr)/len(epoch_train_mrr):.4f} (train)")
             
             print(
@@ -216,13 +216,13 @@ class Trainer:
             print(
                 f"\tEpoch avg F1: {sum(epoch_dev_f1_metrics)/len(epoch_dev_f1_metrics):.4f} (dev)"
             )
-            print(f"\tEpoch avg hits@3: {sum(epoch_dev_hits3)/len(epoch_dev_hits3):.4f} (dev)")
-            print(f"\tEpoch avg hits@10: {sum(epoch_dev_hits10)/len(epoch_dev_hits10):.4f} (dev)")
+            print(f"\tEpoch avg hitsat3: {sum(epoch_dev_hits3)/len(epoch_dev_hits3):.4f} (dev)")
+            print(f"\tEpoch avg hitsat10: {sum(epoch_dev_hits10)/len(epoch_dev_hits10):.4f} (dev)")
             print(f"\tEpoch avg mrr: {sum(epoch_dev_mrr)/len(epoch_dev_mrr):.4f} (dev)")
             print(f"\tLast Acc: {epoch_dev_metrics[-1]:.4f} (dev)")
             print(f"\tLast F1: {epoch_dev_f1_metrics[-1]:.4f} (dev)")
-            print(f"\tEpoch last hits@3: {epoch_dev_hits3[-1]:.4f} (dev")
-            print(f"\tEpoch last hits@10: {epoch_dev_hits10[-1]:.4f} (dev")
+            print(f"\tEpoch last hitsat3: {epoch_dev_hits3[-1]:.4f} (dev")
+            print(f"\tEpoch last hitsat10: {epoch_dev_hits10[-1]:.4f} (dev")
             print(f"\tEpoch last mrr: {epoch_dev_mrr[-1]:.4f} (dev")
 
             if self.params.log_metrics:
@@ -235,8 +235,8 @@ class Trainer:
                     "Epoch Avg F1 train",
                     sum(epoch_train_f1_metrics)/len(epoch_train_f1_metrics),
                 )
-                mlflow.log_metric("Epoch Hits @3 train", epoch_train_hits3[-1])
-                mlflow.log_metric("Epoch Hits @10 train", epoch_train_hits10[-1])
+                mlflow.log_metric("Epoch Hits at3 train", epoch_train_hits3[-1])
+                mlflow.log_metric("Epoch Hits at10 train", epoch_train_hits10[-1])
                 mlflow.log_metric("Epoch MRR train", epoch_train_mrr[-1])
                 mlflow.log_metric(
                     "Epoch Avg Acc dev", sum(epoch_dev_metrics) / len(epoch_dev_metrics)
@@ -248,8 +248,8 @@ class Trainer:
                 mlflow.log_metric("Epoch Avg MRR dev", sum(epoch_dev_mrr)/len(epoch_dev_mrr))
                 mlflow.log_metric("Epoch Acc dev", epoch_dev_metrics[-1])
                 mlflow.log_metric("Epoch F1 dev", epoch_dev_f1_metrics[-1])
-                mlflow.log_metric("Epoch Hits @3 dev", epoch_dev_hits3[-1])
-                mlflow.log_metric("Epoch Hits @10 dev", epoch_dev_hits10[-1])
+                mlflow.log_metric("Epoch Hits at3 dev", epoch_dev_hits3[-1])
+                mlflow.log_metric("Epoch Hits at10 dev", epoch_dev_hits10[-1])
                 mlflow.log_metric("Epoch MRR dev", epoch_dev_mrr[-1])
 
         # print final report

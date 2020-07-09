@@ -330,8 +330,8 @@ if __name__ == "__main__":
             df_train = pd.read_json(args.data_dir + "csqa.train.json")
             df_dev = pd.read_json(args.data_dir + "csqa.dev.json")
             if args.random_emb:
-                train_embs = np.random.uniform(-1, 1, (768, 406213))
-                dev_embs = np.random.uniform(-1, 1, (768, 45076))
+                train_embs = np.random.uniform(-1, 1, (406213, 768))
+                dev_embs = np.random.uniform(-1, 1, (45076, 768))
             else:
                 train_embs = reader.load_embs(args.data_dir + "csqa.train.embeddings.bin")
                 dev_embs = reader.load_embs(args.data_dir + "csqa.dev.embeddings.bin")

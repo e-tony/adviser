@@ -294,43 +294,48 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    config = configparser.ConfigParser()
-    config.read("default.conf")
+    config_files = [os.path.join("config", f) for f in os.listdir("config")]
 
-    # load tags
-    tagset = pd.read_json(args.data_dir + "csqa_tags.json")
+    for file in config_files:
 
-    idx2rel = tagset.to_dict()[0]
-    rel2idx = {v: k for k, v in idx2rel.items()}
+        config = configparser.ConfigParser()
+        # config.read("default.conf")
+        config.read(file)
 
-    if args.log_metrics:
-        mlflow.start_run()
-        mlflow.log_params(utils.get_log_params(config))
+        # load tags
+        tagset = pd.read_json(args.data_dir + "csqa_tags.json")
 
-    trainer = Trainer(config["parameters"], args)
-    if args.train:
-        df_train = pd.read_json(args.data_dir + "csqa.train.json")
-        df_dev = pd.read_json(args.data_dir + "csqa.dev.json")
-        train_embs = reader.load_embs(args.data_dir + "csqa.train.embeddings.bin")
-        dev_embs = reader.load_embs(args.data_dir + "csqa.dev.embeddings.bin")
-        train_data = reader.get_data(
-            df_train,
-            train_embs,
-            rel2idx,
-            subset=int(config["parameters"]["subset_train"]),
-            shuffle=False,
-        )
+        idx2rel = tagset.to_dict()[0]
+        rel2idx = {v: k for k, v in idx2rel.items()}
 
-        df_dev = pd.read_json(args.data_dir + "csqa.dev.json")
-        dev_embs = reader.load_embs(args.data_dir + "csqa.dev.embeddings.bin")
-        dev_data = reader.get_data(
-            df_dev,
-            dev_embs,
-            rel2idx,
-            subset=int(config["parameters"]["subset_dev"]),
-            shuffle=False,
-        )
-        trainer.train(train_data, dev_data)
+        if args.log_metrics:
+            mlflow.start_run()
+            mlflow.log_params(utils.get_log_params(config))
 
-    if args.log_metrics:
-        mlflow.end_run()
+        trainer = Trainer(config["parameters"], args)
+        if args.train:
+            df_train = pd.read_json(args.data_dir + "csqa.train.json")
+            df_dev = pd.read_json(args.data_dir + "csqa.dev.json")
+            train_embs = reader.load_embs(args.data_dir + "csqa.train.embeddings.bin")
+            dev_embs = reader.load_embs(args.data_dir + "csqa.dev.embeddings.bin")
+            train_data = reader.get_data(
+                df_train,
+                train_embs,
+                rel2idx,
+                subset=int(config["parameters"]["subset_train"]),
+                shuffle=False,
+            )
+
+            df_dev = pd.read_json(args.data_dir + "csqa.dev.json")
+            dev_embs = reader.load_embs(args.data_dir + "csqa.dev.embeddings.bin")
+            dev_data = reader.get_data(
+                df_dev,
+                dev_embs,
+                rel2idx,
+                subset=int(config["parameters"]["subset_dev"]),
+                shuffle=False,
+            )
+            trainer.train(train_data, dev_data)
+
+        if args.log_metrics:
+            mlflow.end_run()

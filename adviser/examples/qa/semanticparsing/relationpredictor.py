@@ -292,11 +292,18 @@ if __name__ == "__main__":
         default=False,
         help="Set to True if metrics should me logged with mlflow, else set to False.",
     )
+    parser.add_argument(
+        "--config",
+        required=True,
+        default=False,
+        help="Set to path of configuration file.",
+    )
     args = parser.parse_args()
 
-    config_files = [os.path.join("config", f) for f in os.listdir("config")]
+    config_files = [os.path.join(args.config, f) for f in os.listdir(args.config)]
 
     for file in config_files:
+        print("Working with configuration file:", file)
 
         config = configparser.ConfigParser()
         # config.read("default.conf")

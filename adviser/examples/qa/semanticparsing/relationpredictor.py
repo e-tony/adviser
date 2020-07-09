@@ -25,7 +25,7 @@ class Trainer:
         self.config = config
         self.params = params
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = NN(int(self.config["emb_dim"]), int(self.config["n_classes"]))
+        self.model = NN(int(self.config["emb_dim"]), int(self.config["n_classes"]), n_hid1=int(self.config["h_dim1"]))
         # self.criterion = torch.nn.CrossEntropyLoss().to(self.device)
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=4.0)
         self.scheduler = torch.optim.lr_scheduler.StepLR(

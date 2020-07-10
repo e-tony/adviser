@@ -1,9 +1,6 @@
 import os
 import pandas as pd
 import numpy as np
-import json
-import pickle
-import math
 import time
 import configparser
 import argparse
@@ -20,17 +17,34 @@ from neuralmodels.mlp import NN
 from sklearn.metrics import f1_score, accuracy_score
 
 
-class Trainer:
+class RelationClassifier:
+    """Relation classification module for the semantic parsing module for question answering
+
+    Attributes:
+        config (configparser.ConfigParser): ConfigParser object for loading configurations
+        params (argparse.ArgumentParser): ArgumentParser object for loading command line arguments
+        device (torch.device): PyTorch device object, either CPU or GPU
+        model (nn.Module): neural network for relation classification
+        optimizer (nn.Module): optimizer for neural network
+        scheduler (nn.Module): learning rate scheduler for neural network
+        model_path (str): path to save/load trained model
+    """
     def __init__(self, config, params):
+        """Creates neural network for relation classification
+
+        Args:
+            config: the configuration file
+            params: the command line parameters
+        """
         self.config = config
         self.params = params
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = NN(
-            int(self.config["emb_dim"]),
-            int(self.config["n_classes"]),
-            n_hid1=int(self.config["h_dim1"]),
+            emb_dim = int(self.config["emb_dim"]),
+            out_dim = int(self.config["n_classes"]),
+            dropout = int(self.config["dropout"]),
+            n_hid1 = int(self.config["h_dim1"]),
         )
-        # self.criterion = torch.nn.CrossEntropyLoss().to(self.device)
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=4.0)
         self.scheduler = torch.optim.lr_scheduler.StepLR(
             self.optimizer, 1, gamma=float(self.config["learning_rate"])
@@ -48,6 +62,15 @@ class Trainer:
         self.model = torch.load(model_path)
 
     def get_ranks(self, outputs, y_true):
+        """Computes the ranking of the true label in the output predictions
+
+        Args:
+            outputs: model outputs (number of classes, number of instances)
+            y_true: true labels (number of instances,)
+
+        Returns:
+            ranks: a list of prediction rankings for each instance (number of instances,)
+        """
         ranks = []
         try:
             for i, instance in enumerate(outputs):
@@ -65,6 +88,18 @@ class Trainer:
         return ranks
 
     def train(self, train_data, dev_data):
+        """Train function for the neural network
+
+        This method trains the relation classification neural network. All parameters are contained in the configuration
+        file. Multiple metrics are computed within this function, including a classification report (per class
+        precision, recall, and f1), hits@3, hits@10, and mean reciprocal rank. If the command line parameter to log the
+        metrics is passed, all metrics, including the loss for training and development sets, are logged using mlflow.
+
+        Args:
+            train_data: training data composed of (embeddings, labels, indices)
+            dev_data: development data composed of (embeddings, labels, indices)
+        """
+        # Epoch level metrics
         epoch_loss = []
         epoch_train_metrics = []
         epoch_train_f1_metrics = []
@@ -79,14 +114,15 @@ class Trainer:
         epoch_dev_mrr = []
 
         classes = list(range(281))
-
         batches = utils.split_into_batches(train_data, int(self.config["batch_size"]))
 
-        step = 0
+        step = 0  # step counter for mlflow logging
 
+        # Train model for a number of epochs
         for epoch in range(int(self.config["epochs"])):
             start_time = time.time()
 
+            # Batch level metrics
             train_loss = 0
             train_metrics = []
             train_f1_metrics = []
@@ -100,6 +136,7 @@ class Trainer:
             dev_hits10 = []
             dev_mrr = []
 
+            # Run training in batches
             for i, batch in enumerate(batches):
                 step += 1
                 self.optimizer.zero_grad()  # TODO what does it do?
@@ -112,13 +149,11 @@ class Trainer:
                 embs, rels = embs.to(self.device), rels.to(self.device)
                 outputs = self.model(embs)
                 loss = F.cross_entropy(outputs, rels)
-                # loss = self.criterion(outputs, rels)
                 loss.backward()
                 self.optimizer.step()
-
                 train_loss += loss.item()
-                #         train_loss += loss.detach()  # TODO why does this take so long?
 
+                # Compute train metrics
                 num_corrects = (outputs.argmax(1) == rels).sum().item()
                 train_acc = num_corrects / len(rels)
                 train_metrics.append(train_acc)
@@ -136,6 +171,7 @@ class Trainer:
                 _train_mrr = metrics.mrr(train_ranks)
                 train_mrr.append(_train_mrr)
 
+                # Compute development metrics every 500 batches
                 if i % 500 == 0:
                     with torch.no_grad():
                         dev_embs, dev_rels, dev_idxs = dev_data
@@ -174,6 +210,7 @@ class Trainer:
                         _dev_mrr = metrics.mrr(dev_ranks)
                         dev_mrr.append(_dev_mrr)
 
+                        # Log metrics
                         if self.params.log_metrics:
                             mlflow.log_metric(
                                 "Train loss", train_loss / len(train_metrics), step=step
@@ -198,7 +235,6 @@ class Trainer:
             secs = secs % 60
 
             self.scheduler.step()
-            self.scheduler.step()
             epoch_loss.append(train_loss / len(train_metrics))
             epoch_train_metrics.append(sum(train_metrics) / len(train_metrics))
             epoch_train_f1_metrics.append(sum(train_f1_metrics) / len(train_f1_metrics))
@@ -211,46 +247,49 @@ class Trainer:
             epoch_dev_hits10.append(sum(dev_hits10) / len(dev_hits10))
             epoch_dev_mrr.append(sum(dev_mrr) / len(dev_mrr))
 
-            print(
-                "Epoch: %d" % (epoch + 1),
-                " | time in %d minutes, %d seconds" % (mins, secs),
-            )
-            print(f"\tEpoch avg Loss: {sum(epoch_loss)/len(epoch_loss):.4f}(train)")
-            print(
-                f"\tEpoch avg Acc: {sum(epoch_train_metrics)/len(epoch_train_metrics):.4f} (train)"
-            )
-            print(
-                f"\tEpoch avg F1: {sum(epoch_train_f1_metrics)/len(epoch_train_f1_metrics):.4f} (train)"
-            )
-            print(
-                f"\tEpoch avg hitsat3: {sum(epoch_train_hits3)/len(epoch_train_hits3):.4f} (train)"
-            )
-            print(
-                f"\tEpoch avg hitsat10: {sum(epoch_train_hits10)/len(epoch_train_hits10):.4f} (train)"
-            )
-            print(
-                f"\tEpoch avg mrr: {sum(epoch_train_mrr)/len(epoch_train_mrr):.4f} (train)"
-            )
+            # Print out results
+            if self.params.print_output:
+                print(
+                    "Epoch: %d" % (epoch + 1),
+                    " | time in %d minutes, %d seconds" % (mins, secs),
+                )
+                print(f"\tEpoch avg Loss: {sum(epoch_loss)/len(epoch_loss):.4f}(train)")
+                print(
+                    f"\tEpoch avg Acc: {sum(epoch_train_metrics)/len(epoch_train_metrics):.4f} (train)"
+                )
+                print(
+                    f"\tEpoch avg F1: {sum(epoch_train_f1_metrics)/len(epoch_train_f1_metrics):.4f} (train)"
+                )
+                print(
+                    f"\tEpoch avg hitsat3: {sum(epoch_train_hits3)/len(epoch_train_hits3):.4f} (train)"
+                )
+                print(
+                    f"\tEpoch avg hitsat10: {sum(epoch_train_hits10)/len(epoch_train_hits10):.4f} (train)"
+                )
+                print(
+                    f"\tEpoch avg mrr: {sum(epoch_train_mrr)/len(epoch_train_mrr):.4f} (train)"
+                )
 
-            print(
-                f"\tEpoch avg Acc: {sum(epoch_dev_metrics)/len(epoch_dev_metrics):.4f} (dev)"
-            )
-            print(
-                f"\tEpoch avg F1: {sum(epoch_dev_f1_metrics)/len(epoch_dev_f1_metrics):.4f} (dev)"
-            )
-            print(
-                f"\tEpoch avg hitsat3: {sum(epoch_dev_hits3)/len(epoch_dev_hits3):.4f} (dev)"
-            )
-            print(
-                f"\tEpoch avg hitsat10: {sum(epoch_dev_hits10)/len(epoch_dev_hits10):.4f} (dev)"
-            )
-            print(f"\tEpoch avg mrr: {sum(epoch_dev_mrr)/len(epoch_dev_mrr):.4f} (dev)")
-            print(f"\tLast Acc: {epoch_dev_metrics[-1]:.4f} (dev)")
-            print(f"\tLast F1: {epoch_dev_f1_metrics[-1]:.4f} (dev)")
-            print(f"\tEpoch last hitsat3: {epoch_dev_hits3[-1]:.4f} (dev")
-            print(f"\tEpoch last hitsat10: {epoch_dev_hits10[-1]:.4f} (dev")
-            print(f"\tEpoch last mrr: {epoch_dev_mrr[-1]:.4f} (dev")
+                print(
+                    f"\tEpoch avg Acc: {sum(epoch_dev_metrics)/len(epoch_dev_metrics):.4f} (dev)"
+                )
+                print(
+                    f"\tEpoch avg F1: {sum(epoch_dev_f1_metrics)/len(epoch_dev_f1_metrics):.4f} (dev)"
+                )
+                print(
+                    f"\tEpoch avg hitsat3: {sum(epoch_dev_hits3)/len(epoch_dev_hits3):.4f} (dev)"
+                )
+                print(
+                    f"\tEpoch avg hitsat10: {sum(epoch_dev_hits10)/len(epoch_dev_hits10):.4f} (dev)"
+                )
+                print(f"\tEpoch avg mrr: {sum(epoch_dev_mrr)/len(epoch_dev_mrr):.4f} (dev)")
+                print(f"\tLast Acc: {epoch_dev_metrics[-1]:.4f} (dev)")
+                print(f"\tLast F1: {epoch_dev_f1_metrics[-1]:.4f} (dev)")
+                print(f"\tEpoch last hitsat3: {epoch_dev_hits3[-1]:.4f} (dev")
+                print(f"\tEpoch last hitsat10: {epoch_dev_hits10[-1]:.4f} (dev")
+                print(f"\tEpoch last mrr: {epoch_dev_mrr[-1]:.4f} (dev")
 
+            # Log metrics
             if self.params.log_metrics:
                 mlflow.log_metric(
                     "Epoch Loss", sum(epoch_loss) / len(epoch_loss), step=epoch + 1
@@ -304,8 +343,10 @@ class Trainer:
                 mlflow.log_metric("Epoch MRR dev", epoch_dev_mrr[-1], step=epoch + 1)
 
         # print final report
-        print(epoch_dev_report_metrics[-1])
+        if self.params.print_output:
+            print(epoch_dev_report_metrics[-1])
 
+        # Save model
         if not os.path.isdir("saved_models"):
             os.mkdir("saved_models")
         if not self.model_path:
@@ -315,6 +356,14 @@ class Trainer:
                 "%Y%m%d-%H%M%S"
             ) + ".pt"
         self.save_model()
+
+        # Save classification report
+        report_path = self.model_path.split(".pt")[0]+".report.tsv"
+        report = metrics.get_classification_report(
+                            dev_rels.tolist(), dev_outputs.argmax(1).tolist(), classes, output_dict=True
+                        )
+        report_df = pd.DataFrame(report).transpose()
+        report_df.to_csv(report_path, sep="\t", index=False)
 
 
 if __name__ == "__main__":
@@ -330,12 +379,6 @@ if __name__ == "__main__":
         required=False,
         default=False,
         help="Set to True if training, else set to False.",
-    )
-    parser.add_argument(
-        "--test",
-        required=False,
-        default=False,
-        help="Set to True if testing, else set to False.",
     )
     parser.add_argument(
         "--log-metrics",
@@ -355,20 +398,25 @@ if __name__ == "__main__":
         default=False,
         help="Set to true if sentence embeddings should be randomly generated.",
     )
+    parser.add_argument(
+        "--print-output",
+        required=False,
+        default=True,
+        help="Set to false if no outputs should be printed to the terminal.",
+    )
     args = parser.parse_args()
 
+    # Load configuration folder with configuration files
     config_files = [os.path.join(args.config, f) for f in os.listdir(args.config)]
 
+    # Run training for each configuration file
     for file in config_files:
         print("Working with configuration file:", file)
-
         config = configparser.ConfigParser()
-        # config.read("default.conf")
         config.read(file)
 
-        # load tags
+        # Create tagset class to index mapping
         tagset = pd.read_json(args.data_dir + "csqa_tags.json")
-
         idx2rel = tagset.to_dict()[0]
         rel2idx = {v: k for k, v in idx2rel.items()}
 
@@ -376,7 +424,7 @@ if __name__ == "__main__":
             mlflow.start_run()
             mlflow.log_params(utils.get_log_params(config))
 
-        trainer = Trainer(config["parameters"], args)
+        trainer = RelationClassifier(config["parameters"], args)
         if args.train:
             df_train = pd.read_json(args.data_dir + "csqa.train.json")
             df_dev = pd.read_json(args.data_dir + "csqa.dev.json")
@@ -397,8 +445,6 @@ if __name__ == "__main__":
                 random=args.random_emb,
             )
 
-            # df_dev = pd.read_json(args.data_dir + "csqa.dev.json")
-            # dev_embs = reader.load_embs(args.data_dir + "csqa.dev.embeddings.bin")
             dev_data = reader.get_data(
                 df_dev,
                 dev_embs,
@@ -408,6 +454,8 @@ if __name__ == "__main__":
                 random=args.random_emb,
             )
             trainer.train(train_data, dev_data)
+
+        # No evaluation function for testing
 
         if args.log_metrics:
             mlflow.end_run()

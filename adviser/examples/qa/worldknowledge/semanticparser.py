@@ -23,6 +23,8 @@ import json
 import torch
 from bert_embedding import BertEmbedding
 import numpy as np
+import torch.nn as nn
+import torch.nn.functional as F
 
 from utils.logger import DiasysLogger
 from utils.domain.lookupdomain import LookupDomain
@@ -32,9 +34,9 @@ from utils.beliefstate import BeliefState
 from utils.common import Language
 from services.service import PublishSubscribe, Service
 
-from .neuralmodels.simpledot import SimpleDot
 from .neuralmodels.tagger import Tagger, extract_entities
 from .neuralmodels.director import Classifier
+from .neuralmodels.mlp import NN
 
 def get_root_dir():
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -74,8 +76,8 @@ class QuestionParser(Service):
         self.embedding_creator = BertEmbedding(max_seq_length=self.max_seq_len)
 
     def _load_relation_model(self):
-        model = SimpleDot(100, 400, True).to(self.device)
-        model.load_state_dict(torch.load(os.path.join(get_root_dir(), 'resources', 'models', 'qa', 'simpledot.pt'), map_location=self.device))
+        model = NN(768, 281).to(self.device)
+        model.load_state_dict(torch.load(os.path.join(get_root_dir(), 'resources', 'models', 'qa', 'batch_size=64&epochs=200&emb_dim=768&n_classes=281&learning_rate=0.9&subset_train=500000&subset_dev=50000.pt'), map_location=self.device))
         model.eval()
         return model
 
@@ -129,7 +131,7 @@ class QuestionParser(Service):
 
         tokens, embeddings = self._preprocess_utterance(user_utterance)
 
-        relation_out = self._predict_relation(embeddings)
+        relation_out = self._predict_relation(embeddings[0])
         entities_out = self._predict_topic_entities(embeddings)
         direction_out = self._predict_direction(embeddings)
 

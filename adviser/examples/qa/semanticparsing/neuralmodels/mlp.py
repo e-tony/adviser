@@ -1,33 +1,22 @@
-import os
-import pandas as pd
-import numpy as np
-import json
-import pickle
-import math
-
 import torch.nn as nn
-import torch.nn.functional as F
-
-
-class MLP(nn.Module):
-    def __init__(self, embed_dim, num_class):
-        super(MLP, self).__init__()
-        self.fc = nn.Linear(embed_dim, num_class)
-        self.init_weights()
-
-    def init_weights(self):
-        initrange = 0.5
-        self.fc.weight.data.uniform_(-initrange, initrange)
-        self.fc.bias.data.zero_()
-
-    def forward(self, emb):
-        output = self.fc(emb)
-        output = F.log_softmax(output, dim=1)
-        return output
 
 
 class NN(nn.Module):
+    """Neural network for prediction the relation of a question
+
+    Attributes:
+        model (nn.Module): PyTorch neural network module
+    """
     def __init__(self, emb_dim, out_dim, dropout=0.25, n_hid1=256, n_hid2=256):
+        """Initializes all required elements of the neural network
+
+        Args:
+            emb_dim: Input size of the embedding
+            out_dim: Output size of the linear layer
+            dropout: Dropout value
+            n_hid1: Size for hidden layer 1
+            n_hid2: Size for hidden layer 2
+        """
         super().__init__()
         self.model = nn.Sequential(
             nn.Dropout(dropout),
@@ -47,4 +36,12 @@ class NN(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
+        """Application of the neural network on a given input question
+
+        Args:
+            x: Tensor containing the embeddings of shape (batch, embedding size)
+
+        Returns:
+            Probabilities of the relation classes
+        """
         return self.model(x)

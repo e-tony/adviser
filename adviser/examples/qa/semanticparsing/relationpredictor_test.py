@@ -42,7 +42,7 @@ class RelationClassifier:
         self.model = NN(
             emb_dim = int(self.config["emb_dim"]),
             out_dim = int(self.config["n_classes"]),
-            dropout = int(self.config["dropout"]),
+            dropout = float(self.config["dropout"]),
             n_hid1 = int(self.config["h_dim1"]),
         )
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=4.0)

@@ -1,0 +1,10 @@
+[parameters]
+batch_size = 128
+epochs = 100
+emb_dim = 768
+n_classes = 281
+h_dim1 = 256
+learning_rate = 0.9
+dropout = 0
+subset_train = 406213
+subset_test = 72331

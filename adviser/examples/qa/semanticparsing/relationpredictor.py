@@ -579,6 +579,8 @@ if __name__ == "__main__":
                 classifier.evaluate(test_data)
             
 
+        # No evaluation function for testing
+
         if args.log_metrics:
             mlflow.end_run()
 
